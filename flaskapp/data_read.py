@@ -7,7 +7,7 @@ import datetime
 bp = Blueprint("data_read", __name__)
 
 
-@bp.route("all_data", methods=["GET"])
+@bp.route("/all_data", methods=["GET"])
 def get_all_data():
     db= get_db()
     
