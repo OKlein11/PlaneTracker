@@ -26,7 +26,7 @@ def add_dump():
         db = get_db()
 
         data = request.json
-
+        print(data)
         for flight in data["aircraft"]:
             keys = ""
             values = []
@@ -34,6 +34,8 @@ def add_dump():
                 if dump in flight.keys():
                     keys += f", {sql}"
                     values.append(flight[dump])
+            print(values)
+            print(keys)
             keys += f", datetime"
             values.append(datetime.datetime.now())
             db.execute(f"INSERT INTO flights ({keys}) VALUES (?,?)")
