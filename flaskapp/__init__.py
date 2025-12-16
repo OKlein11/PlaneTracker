@@ -28,6 +28,9 @@ def create_app(test_config=None):
     from . import data_add
     app.register_blueprint(data_add.bp)
 
+    from . import data_read
+    app.register_blueprint(data_read.bp)
+
 
     @app.route("/hello")
     def hello():
