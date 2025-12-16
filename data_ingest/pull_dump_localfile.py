@@ -7,7 +7,7 @@ def main():
     with open(os.path.join("/run","dump1090-fa","aircraft.json")) as f:
         data = json.load(f)
     
-    requests.post("127.0.0.1:5000/add_dump", data=data)
+    requests.post("http://127.0.0.1:5000/add_dump", data=data)
 
 
 
