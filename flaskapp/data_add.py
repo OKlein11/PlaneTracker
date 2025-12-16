@@ -25,7 +25,7 @@ def add_dump():
     if request.method == "POST":
         db = get_db()
 
-        data = request.json
+        data = request.get_json()
         print(data)
         for flight in data["aircraft"]:
             keys = ""
