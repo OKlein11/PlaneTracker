@@ -22,6 +22,7 @@ bp = Blueprint("data_add", __name__)
 
 @bp.route("/add_dump", methods=["POST"])
 def add_dump():
+    print("Test")
     if request.method == "POST":
         db = get_db()
 
