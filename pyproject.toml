@@ -1,5 +1,5 @@
 [project]
-name = "planetracker"
+name = "flaskapp"
 version = "1.0.0"
 description = "planetracker thing"
 dependencies = [
