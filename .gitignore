@@ -3,6 +3,7 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+*/__pycache__/
 # C extensions
 *.so
 
@@ -234,3 +235,7 @@ build/
 */secrets.py
 
 prod/
+
+.claude/
+
+.DS_Store

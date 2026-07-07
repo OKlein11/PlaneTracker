@@ -31,9 +31,4 @@ def create_app(test_config=None):
     from . import data_read
     app.register_blueprint(data_read.bp)
 
-
-    @app.route("/hello")
-    def hello():
-        return "Hello, World"
-    
     return app

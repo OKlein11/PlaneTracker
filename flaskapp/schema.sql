@@ -23,5 +23,7 @@ CREATE TABLE flights (
     dest_icao_actual TEXT,
     datetime_takeoff NUMERIC,
     datetime_landing NUMERIC,
-    flight_ended BOOLEAN
+    flight_ended BOOLEAN,
+    fr24_lookup_attempts INTEGER NOT NULL DEFAULT 0,
+    fr24_last_attempt_at TIMESTAMP
 );

@@ -5,8 +5,12 @@ description = "planetracker thing"
 dependencies = [
     "flask",
     "requests",
-    "fr24sdk"
+    "fr24sdk",
+    "pydantic"
 ]
+
+[project.optional-dependencies]
+dev = ["pytest"]
 
 [build-system]
 requires = ["flit_core<4"]
