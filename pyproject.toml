@@ -4,7 +4,8 @@ version = "1.0.0"
 description = "planetracker thing"
 dependencies = [
     "flask",
-    "requests"
+    "requests",
+    "fr24sdk"
 ]
 
 [build-system]

@@ -230,3 +230,7 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+*/secrets.py
+
+prod/
