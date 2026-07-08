@@ -12,12 +12,14 @@ from digitalio import DigitalInOut
 import busio
 import displayio
 import gc
-from secrets import DATA_SOURCE,CENTER_LONG,CENTER_LAT,NE_CORNER,SW_CORNER
+from secrets import DATA_SOURCE,NE_CORNER,SW_CORNER
 
 
 ## CONSTANTS
 
 FLIGHT_CHANGE = 5
+MAX_FLIGHTS = 8
+MAX_TEXT_LEN = 8
 
 
 ## LOADING FROM FILES
@@ -49,10 +51,6 @@ def flight_label(flight,x=34,y=26,color=0x0000FF):
     lab.x = x
     lab.y = y
     return lab
-
-def flight_loc_dot(x,y, bitmap):
-    bitmap[x,y] = 1
-    return [x,y]
 
 
 
@@ -86,39 +84,57 @@ matrixportal = MatrixPortal(esp=esp)
 display = matrixportal.graphics.display
 
 
-
-
-
-
-
-
-
-
 superroot = displayio.Group()
-root = displayio.Group()
 display.root_group = superroot
 last_call = time.monotonic()
-flights = []
-dots = []
-root = displayio.Group()
-flightdots = displayio.Bitmap(64,32,3)
+flightdots = displayio.Bitmap(64,32,4)
 
 
 palette = displayio.Palette(4)
 palette[0] = 0x000000 # OFF
 palette[1] = 0xFFFFFF # WHITE
-palette[2] = 0xa102d6 # PURPLE
-palette[3] = 0x00FF00 # GREEN
+palette[2] = 0xa102d6 # PURPLE (highlighted/active flight)
+palette[3] = 0x00FF00 # GREEN (receiver location marker)
 tile_grid = displayio.TileGrid(flightdots, pixel_shader=palette)
 superroot.append(tile_grid)
 
-print("TESTING")
+# Permanent 2x2 marker for the receiver's own location, hardcoded at the
+# center of the 32x32 grid. Never cleared by the per-cycle dot-clearing
+# logic below.
+receiver_pixels = {(15, 15), (16, 15), (15, 16), (16, 16)}
+for px, py in receiver_pixels:
+    flightdots[px, py] = 3
 
-flightdots[15,15] = 3
-flightdots[15,16] = 3
-flightdots[16,15] = 3
-flightdots[16,16] = 3
+# Fixed pool of MAX_FLIGHTS display slots, built once at boot. Updating a
+# slot's label .text / dot position in place (instead of building new
+# displayio.Group/Label objects every cycle) avoids the heap fragmentation
+# that repeated allocation of displayio objects causes on CircuitPython.
+root = displayio.Group()
+slot_groups = []
+orig_labels = []
+dest_labels = []
+flight_labels = []
+slot_x = [0] * MAX_FLIGHTS
+slot_y = [0] * MAX_FLIGHTS
+num_active = 0
+current = 0
 
+for _ in range(MAX_FLIGHTS):
+    o_lab = orig_label(" " * 4)
+    d_lab = dest_label(" " * 4)
+    f_lab = flight_label(" " * MAX_TEXT_LEN)
+
+    slot_group = displayio.Group()
+    slot_group.append(o_lab)
+    slot_group.append(d_lab)
+    slot_group.append(f_lab)
+    slot_group.hidden = True
+
+    root.append(slot_group)
+    slot_groups.append(slot_group)
+    orig_labels.append(o_lab)
+    dest_labels.append(d_lab)
+    flight_labels.append(f_lab)
 
 superroot.append(root)
 
@@ -126,81 +142,64 @@ superroot.append(root)
 print("Test")
 while True:
 
+    # Show the currently selected flight (purple + its labels) for
+    # FLIGHT_CHANGE seconds before deciding what happens next. Keeping the
+    # "hide the old one" step below (either in the fetch branch or the
+    # plain-rotation branch) instead of here means the currently displayed
+    # flight stays on screen for the entire fetch, so nothing ever goes
+    # blank while waiting on the network.
+    if num_active > 0:
+        slot_groups[current].hidden = False
+        x, y = slot_x[current], slot_y[current]
+        flightdots[x, y] = 2
+        time.sleep(FLIGHT_CHANGE)
+
     if time.monotonic() - 10 > last_call:
+        last_call = time.monotonic()
+
         try:
             flights = requests.get(DATA_SOURCE, timeout=10).json()["data"]
-            print(flights)
-        except:
-            flights = {}
-        last_call = time.monotonic()
-        root=displayio.Group()
+        except (OSError, RuntimeError, ValueError) as e:
+            print("fetch failed:", e)
+            flights = []
 
-        for dot in dots:
-            if dot[0] in [15,16] and dot[1] in [15,16]:
-                flightdots[dot[0],dot[1]] = 3
-            else:
-                flightdots[dot[0],dot[1]] = 0
+        if len(flights) > MAX_FLIGHTS:
+            print("Too many flights (", len(flights), "), showing first", MAX_FLIGHTS)
 
-        dots=[]
+        # New data is ready -- only now is it safe to clear the previous
+        # cycle's dots/labels (using the OLD num_active/slot_x/slot_y). A
+        # cleared pixel goes back to green if it's part of the receiver
+        # marker, otherwise off.
+        for i in range(num_active):
+            x, y = slot_x[i], slot_y[i]
+            flightdots[x, y] = 3 if (x, y) in receiver_pixels else 0
 
+        num_active = min(len(flights), MAX_FLIGHTS)
 
+        for i in range(MAX_FLIGHTS):
+            if i < num_active:
+                flight = flights[i]
+                print(flight)
+                pix_x, pix_y = get_loc(flight["latitude"], flight["longitude"])
+                pix_x = min(31, max(0, pix_x))
+                pix_y = min(31, max(0, pix_y))
 
+                orig_labels[i].text = flight["orig_icao"]
+                dest_labels[i].text = flight["dest_icao"]
+                flight_text = flight["flight"] if flight["flight"] is not None else flight["registration"]
+                flight_text = flight_text[:MAX_TEXT_LEN]
+                flight_labels[i].text = flight_text + " " * (MAX_TEXT_LEN - len(flight_text))
 
-    for num,flight in enumerate(flights):
-        if num >= 8:
-            print("Too many flights, not enough mem")
-            continue
-        print(flight)
-        pix_x, pix_y = get_loc(flight["latitude"],flight["longitude"])
+                slot_x[i], slot_y[i] = pix_x, pix_y
+                flightdots[pix_x, pix_y] = 1
+            slot_groups[i].hidden = True
 
-        if pix_x > 31:
-            pix_x = 31
-        elif pix_x < 0:
-            pix_x = 0
-
-        if pix_y >31:
-            pix_y = 31
-        elif pix_y < 0:
-            pix_y = 0
-
-
-        root.append(displayio.Group())
-
-
-        root[-1].append(orig_label(flight["orig_icao"]))
-        root[-1].append(dest_label(flight["dest_icao"]))
-
-        if flight["flight"] is not None:
-            root[-1].append(flight_label(flight["flight"]))
-        else:
-            root[-1].append(flight_label(flight["registration"]))
-
-        dots.append(flight_loc_dot(pix_x,pix_y,flightdots))
-
-    for x in root:
-        x.hidden=True
-
-    superroot.pop(1)
-    superroot.append(root)
-
-
-
-    current_num = 0
-    while current_num < len(root):
-        root[current_num].hidden=False
-        x,y = dots[current_num]
-        flightdots[x,y]=2
-
-        time.sleep(FLIGHT_CHANGE)
-        root[current_num].hidden=True
-        flightdots[x,y]=1
-
-        current_num += 1
-    if len(root) != 0:
-        root[0].hidden = False
-        x,y = dots[0]
-        flightdots[x,y] = 2
+        del flights
+        current = 0
+    elif num_active > 0:
+        slot_groups[current].hidden = True
+        x, y = slot_x[current], slot_y[current]
+        flightdots[x, y] = 1
+        current = (current + 1) % num_active
 
     gc.collect()
-
-
